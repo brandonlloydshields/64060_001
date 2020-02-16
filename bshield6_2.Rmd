@@ -1,0 +1,196 @@
+---
+title: "bshield6_2.3"
+author: "Brandon Lloyd Shields"
+date: "2/10/2020"
+output: html_document
+---
+
+```{r}
+#Install required pakages 
+library(caret)
+library(class)
+library(gmodels)
+
+#read in CSV file for training and testing 
+ ubank <- read.csv(file = "~/Desktop/UniversalBank.csv")
+
+```
+
+```{r}
+#After reviewing data, it appears all categorical variables are in binary form except for education. It appears in three levels as seen below. We will need to convert to dummy before implementing k-NN.
+
+ubank$Education <- as.factor(ubank$Education)
+dummy_model <- dummyVars(~., data=ubank)
+head(predict(dummy_model,ubank))
+ubank1 <- data.frame(predict(dummy_model, newdata = ubank))
+
+#Define success level of personal loan as 1. In "R" first level is failure and second is success. In this case, the default is set to success.  
+ubank1$Personal.Loan <- as.factor(ubank1$Personal.Loan)
+levels(ubank1$Personal.Loan)
+
+```
+
+```{r}
+#Create Partitioned data sets for training and validation. Use stratified sampling with personal loan to ensure training and validation training sets match to avoid underfitting.
+
+Train_Index <- createDataPartition(ubank1$Personal.Loan, p=.6, list = FALSE)
+Train_ubank <- ubank1[Train_Index,]
+Validate_ubank <- ubank1[-Train_Index,]
+```
+
+```{r}
+#Normalize continuous variables used in modeling 
+
+Train_ubank_norm <- Train_ubank
+Validate_ubank_norm <- Validate_ubank
+
+norm_values <- preProcess(Train_ubank[,c(2:4,6:7,11)], method = c("center", "scale"))
+Train_ubank_norm[,c(2:4,6:7,11)] <- predict(norm_values, Train_ubank[,c(2:4,6:7,11)])
+Validate_ubank_norm[,c(2:4,6:7,11)] <- predict(norm_values, Validate_ubank[,c(2:4,6:7,11)])
+```
+
+```{r}
+
+Train_predictors <-Train_ubank_norm[,c(2:4,6:11,13:16)]
+Validate_predictors <- Validate_ubank_norm[,c(2:4,6:11,13:16)]
+
+Train_labels <-Train_ubank_norm[,12]
+Validate_labels <- Validate_ubank_norm[,12]
+
+```
+
+```{r}
+#Question1
+
+#Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education_1 = 0, Education_2 = 1, Education_3 = 0, Mortgage = 0, Securities Account = 0, CD Account = 0, Online = 1, and Credit Card = 1. Perform a k-NN classification with all predictors except ID and ZIP code using k = 1. Remember to transform categorical predictors with more than two categories into dummy variables first.
+
+
+new.data <- data.frame(Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education.1 = 0, Education.2 = 1, Education.3 = 0, Mortgage = 0, Securities.Account = 0, CD.Account = 0, Online = 1, CreditCard = 1)
+
+new.data.normalized <- new.data
+
+new.data.normalized[,c(1:5,9)] <- predict(norm_values, new.data[,c(1:5,9)])
+
+Predict_Values_Q1 <- knn(Train_predictors, new.data.normalized, cl = Train_labels, k = 1)
+
+Predict_Values_Q1
+
+#The Output below suggests that the model predicts that a person with these criteria would not take out a personal loan.
+
+```
+
+
+```{r}
+#QUESTION 2
+
+set.seed(123)
+model_hyper <- train(Personal.Loan ~ Age + Experience + Income + Family + CCAvg + Education.1 + Education.2 + Education.3 + Mortgage + Securities.Account + CD.Account + Online + CreditCard, data = Train_ubank_norm, method = "knn")
+
+model_hyper
+
+#Optimal k = 5
+```
+
+```{r}
+#QUESTION 3
+
+Predicted_Validate_Labels_k5 <- knn(Train_predictors, Validate_predictors, cl = Train_labels, k=5)
+
+CrossTable(x=Validate_labels, y=Predicted_Validate_Labels_k5,prop.chisq = FALSE)
+
+# confusion matrix calculations:
+#Accuracy = (1806 + 123)/2000 = 96.45%
+#Recall = 123 /(123 + 69) = 64.06%
+#Precision = 123 / (123 + 2) = 98.4%
+#Specificty = 1806 / (1806 + 2) = 99.9%
+```
+
+```{r}
+#QUESTION 4
+
+Predict_Values_Q4 <- knn(Train_predictors, new.data.normalized, cl = Train_labels, k = 5)
+
+Predict_Values_Q4
+
+#Even when best K is selected based on hyper tuning, the algorithm still predicts no personal loan. 
+```
+
+```{r}
+#Question 5
+
+#Create Partitioned data sets for training and validation. Use stratified sampling with personal loan to ensure training and validation training sets match to avoid underfitting
+
+Train_Index2 <- createDataPartition(ubank1$Personal.Loan, p=.5, list = FALSE)
+Train_ubank_Q5 <- ubank1[Train_Index2,]
+Intermediate_ubank_Q5 <- ubank1[-Train_Index2,]
+
+Train_Index3 <- createDataPartition(Intermediate_ubank_Q5$Personal.Loan, p=.6, list = FALSE)
+Validate_ubank_Q5 <- Intermediate_ubank_Q5[Train_Index3,]
+Test_ubank_Q5 <- Intermediate_ubank_Q5[-Train_Index3,]
+```
+
+```{r}
+#Normalize Data 
+Train_ubank_Q5norm <- Train_ubank_Q5
+Validate_ubank_Q5norm <- Validate_ubank_Q5
+Test_ubank_Q5norm <- Test_ubank_Q5
+
+norm_values_Q5 <- preProcess(Train_ubank_Q5[,c(2:4,6:7,11)], method = c("center", "scale"))
+Train_ubank_Q5norm[,c(2:4,6:7,11)] <- predict(norm_values, Train_ubank_Q5[,c(2:4,6:7,11)])
+Validate_ubank_Q5norm[,c(2:4,6:7,11)] <- predict(norm_values, Validate_ubank_Q5[,c(2:4,6:7,11)])
+Test_ubank_Q5norm[,c(2:4,6:7,11)] <- predict(norm_values, Test_ubank_Q5[,c(2:4,6:7,11)])
+
+#Create predictors and labels 
+Train_predictors_Q5 <-Train_ubank_Q5norm[,c(2:4,6:11,13:16)]
+Validate_predictors_Q5 <- Validate_ubank_Q5norm[,c(2:4,6:11,13:16)]
+Test_predictors_Q5 <- Test_ubank_Q5norm[,c(2:4,6:11,13:16)]
+
+Train_labels_Q5 <-Train_ubank_Q5norm[,12]
+Validate_labels_Q5 <- Validate_ubank_Q5norm[,12]
+Test_labels_Q5 <- Test_ubank_Q5norm[,12]
+```
+
+```{r}
+Predicted_Train_labels_Q5 <- knn(Train_predictors_Q5, Train_predictors_Q5, cl = Train_labels_Q5, k = 5)
+
+CrossTable(x = Train_labels_Q5, y = Predicted_Train_labels_Q5, prop.chisq = FALSE)
+```
+
+
+```{r}
+Predicted_Validate_labels_Q5 <- knn(Train_predictors_Q5,Validate_predictors_Q5, cl = Train_labels_Q5, k = 5)
+
+CrossTable(x = Validate_labels_Q5, y = Predicted_Validate_labels_Q5, prop.chisq = FALSE)
+```
+
+```{r}
+Predicted_Test_labels_Q5 <- knn(Train_predictors_Q5,Test_predictors_Q5, cl = Train_labels_Q5, k = 5)
+
+CrossTable(x = Test_labels_Q5, y = Predicted_Test_labels_Q5, prop.chisq = FALSE)
+```
+
+```{r}
+#Q5 Analysis 
+
+#Train Confusion Matrix
+#Accuracy = ( 166 + 2259 )/ 2500 = 97.0%
+#Recall =  166 /( 166 + 74) = 69.2%
+#Precision =  166 / ( 166 + 1) = 99.4%
+#Specificty =  2259 / ( 2259 + 1 ) = 99.9%
+
+#Validate Confusion Matrix
+#Accuracy = ( 96 + 1354)/ 1500 = 96.6%
+#Recall =  96/( 96 + 48) = 66.6 %
+#Precision =  96 / (96 + 2) = 98.0%
+#Specificty =  1354  / (1354  + 2) =99.8%
+
+#Test Confusion Matrix
+#Accuracy = ( 58 + 902)/1000 = 96.0 %
+#Recall =  58 /( 58 + 38) = 60.4 %
+#Precision =  58 / (58+ 2) = 96.7%
+#Specificty =  902 / ( 902+2 ) = 99.8%
+
+
+#When llooking at indicators for model performance we can see that most of these metrics are very close between the test dataset and those for validation and training. This would indicate that we did not underfit our data. However, the test dataset does perform slightly worse than train and validate datasets. This would be exepcted as we have captured a small bit of "noise" in the test dataset. However, given that this difference is so small we can conclude the model was not overfitted. This means that we can have confidence in our parameters and hyperparameters and therefore our models ability to accuratley predict a personal loan on unseen sets of data. 
+```
+
