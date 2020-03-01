@@ -1,0 +1,128 @@
+---
+title: "Naive Bayes"
+author: "Brandon Lloyd Shields"
+date: "2/24/2020"
+output: html_document
+---
+
+
+```{r}
+
+#Loading Packages 
+
+library(caret)
+library(e1071)
+library(gmodels)
+library(pROC)
+```
+
+```{r}
+# Reading in data set
+
+flight <- read.csv(file = "~/Desktop/FlightDelays.csv")
+```
+
+```{r}
+#Assignment Notes
+
+#Want to predict if a flight is going to be late
+#Late is defined as more than 15 minutes late
+#Percentage of delayed flights is 19.5%
+#Delayed = 1 and Ontime = 0
+```
+
+```{r}
+#Change numerical variable to categorical
+flight$DAY_WEEK <- as.factor(flight$DAY_WEEK)
+flight$DEP_TIME <- as.factor(flight$DEP_TIME)
+flight$Weather <- as.factor(flight$Weather)
+flight$DAY_OF_MONTH <- as.factor(flight$DAY_OF_MONTH)
+
+#create hourly bins for departure time
+
+flight$CRS_DEP_TIME <- factor(round(flight$CRS_DEP_TIME/100))
+
+```
+
+```{r}
+#Creating dataframe for modeling 
+
+flight.model <- flight[,c(1,2,3,4,8,9,10,11,13)]
+
+```
+
+```{r}
+#Creating Training and Validation Dataset
+
+set.seed(123)
+Index_Train <- createDataPartition(flight.model$Flight.Status, p=.6, list=FALSE)
+Train <- flight.model[Index_Train,]
+Validate <- flight.model[-Index_Train,]
+```
+
+```{r}
+summary(Train)
+```
+
+```{r}
+summary(Validate)
+```
+
+```{r}
+#After reveiwning the train and validate datasets, we can see that both include predictor variables needed for aalysis. This means we will not need to use laplace technniques to avoid 0 probalities assumptions by the model. 
+```
+
+
+```{r}
+#Run Naive Bayes - Omit #DEP_TIME
+nb_model <- naiveBayes(Flight.Status ~ CRS_DEP_TIME + CARRIER + DEST + ORIGIN + Weather + DAY_WEEK + DAY_OF_MONTH, data = Train)
+
+nb_model
+```
+
+```{r}
+#creating a prop table proportion
+
+prop.table(table(Train$Flight.Status, Train$DEST), margin = 1)
+```
+
+```{r}
+#creating a count table proportion
+
+table(Train$Flight.Status, Train$DEST)
+```
+
+```{r}
+#Predict Status of Valudation Data Set
+
+Predit_Validate_labels <- predict(nb_model, Validate)
+
+```
+
+```{r}
+#Create a Frequency Table 
+
+CrossTable(x=Validate$Flight.Status, y= Predit_Validate_labels, prop.chisq = FALSE)
+
+```
+
+```{r}
+
+#Predicting Probabilities for AUC
+
+Predict_Validate_Labels_Prob <- predict(nb_model, Validate, type = "raw")
+
+head(Predict_Validate_Labels_Prob)
+```
+
+```{r}
+roc(Validate$Flight.Status, Predict_Validate_Labels_Prob[,2])
+
+```
+
+```{r}
+plot.roc(Validate$Flight.Status, Predict_Validate_Labels_Prob[,2])
+
+#Because we have a value of .7725 which is above .7 we can say that is will do a reasonable job of predicting whether a flight will be delayed or not. 
+```
+
