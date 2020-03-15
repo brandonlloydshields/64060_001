@@ -1,0 +1,273 @@
+---
+title: "bshield6_4"
+author: "Brandon Lloyd Shields"
+date: "3/10/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(flexclust)
+library(factoextra)
+library(dplyr)
+library(maps)
+library(TSdist)
+```
+
+
+```{r}
+univ <- read.csv(file = "~/Desktop/Universities.csv")
+```
+
+```{r}
+# Remove blank values from data set
+
+complete.cases(univ)
+
+univ.com <- univ[complete.cases(univ),]
+
+```
+
+```{r}
+#attemped to name rows based on univeristy name but error produced saying there were duplicate values. For this reason I decided to not name the rows. 
+
+#slecting only continuous variables 
+univ.cont <- univ.com[,c(4:20)]
+
+#setting up for normalization
+univ.norm <- univ.cont
+norm.values<- preProcess(univ.cont, method = c("center", "scale"))
+univ.norm <- predict(norm.values,univ.cont)
+
+```
+
+```{r}
+#Run Initial K Means with 4 centroids
+set.seed(123)
+k4 <- kmeans(univ.norm, centers = 4, nstart = 25)
+k4$centers
+k4$size
+
+
+```
+
+
+
+```{r}
+#tuning to determine the optinal number of clusters
+fviz_nbclust(univ.norm, kmeans, method = "wss")
+fviz_nbclust(univ.norm, kmeans, method = "silhouette")
+
+#based on these results, the optimal number of clusters is three
+```
+
+```{r}
+#running with optimal k
+
+set.seed(564)
+k3 <- kmeans(univ.norm, centers = 3, nstart = 25)
+k3$centers
+k3$size
+```
+
+```{r}
+#Group 1 (275) This group is made up of smaller schools (based on applications recieved , accepted and enrolled) and of lower quality (based on those from top 10% and 25%). These schools also cost less based on variables related to fees. While they have decent student-faculty ratio their faculty are not as likely to be terminally qualified and their lower graduation rate reflects student quality.
+#Group 2 (150) These schools are also small (based on applications recieved , accepted and enrolled) but admit a better quality student (based on those from top 10% and 25%). These schools tend to be more expesnive in reagrds to tuition room and board. They have smaller class sizes but they have many qualified faculty and higher graudation rates
+#Group 3 (46) The smallest group but largest in terms of enrollment (based on applications recieved , accepted and enrolled). The quality of student is above group one but below group 3 (based on those from top 10% and 25%). They are middle of the road in regards to tution. They higher numbers of temrinally qulaified faculty than grouo one, but theuy have the largest class sizes and graudation rates below group three. 
+```
+
+```{r}
+#visuals
+
+fviz_cluster(k3, univ.norm)
+```
+
+```{r}
+k3$cluster
+
+group <- k3$cluster
+
+univ.com.group <- cbind(univ.com,group)
+
+group1 <- filter(univ.com.group, group == 1)
+group2 <- filter(univ.com.group, group == 2)
+group3 <- filter(univ.com.group, group == 3)
+
+```
+
+```{r}
+table(univ.com.group$Public..1...Private..2., univ.com.group$group)
+prop.table(table(univ.com.group$Public..1...Private..2., univ.com.group$group), margin = 1)
+prop.table(table(univ.com.group$Public..1...Private..2., univ.com.group$group), margin = 2)
+```
+
+```{r}
+#The table view above can reveal some insights into the interplay between public and private schools and the groups. The tables reveal that group two (characterized by smnaller enrollments, higher tuition and higher graduation rates) are almost exlusivley private schools. On the other hand, group three (characterized by large enrollments, and middle-of the road student quality, graduation rates and tution) were public institutions. Finally, Group 1 (characterized by smaller students, lower quality enrollments and lower graduations rates) were 70% private and 30% public. 
+```
+
+```{r}
+m1 <- ggplot(univ.com.group, aes(x=stud..fac..ratio, y=Graduation.rate))
+
+m2 = m1 +geom_point(aes(colour = Public..1...Private..2. )) + facet_grid(.~ group)
+
+m2
+
+#The vidual below also shows the relationship we saw in the table above. When split into the three groups we can see that group two is mostly private and group three is dominated by public. Group one, has both private and public. When plotted student faculty ratio asgainst graduation rate, it would seem that while both have high graudation rates that spoan 20% to 90%, most of the public schools have student two faculty ratios at 15 or above while the private schools have 15 or less.
+```
+
+
+
+
+```{r}
+summary(group1$State)
+summary(group2$State)
+summary(group3$State)
+```
+
+```{r}
+
+#prepping to make spatial map
+
+g1map <- univ.com.group %>% group_by(State)  %>% filter(group == 1) %>% tally()
+g2map <- univ.com.group %>% group_by(State)  %>% filter(group == 2) %>% tally()
+g3map <- univ.com.group %>% group_by(State)  %>% filter(group == 3) %>% tally()
+
+map <- map_data("state")
+
+k <- ggplot(g1map, aes(fill=n))
+k2 <- k + geom_map(aes(map_id = State), map = map) + expand_limits(x = map$long, y=map$lat)
+k2
+
+# Tried to create a spatial density map to see where the different groups are located but was unable. I am thinking this could be because the map_data for state is spelled out, while my data uses two letter codes. 
+
+#However, by looking at the filtere groups above you can see a couple of things. First of all group two tends to have higher densitys in four states: PA, NY, MA and California. Group 3, is pretty evenly spread out across the country, which would make sense given that each state has a few large state universitys. Group 1 has a large concentration of schools in a few states in the Midwest,  Northeast, and South. 
+
+
+```
+
+```{r}
+#What other external information can explain the contents of some or all of these clusters?
+
+#There are external factors that could also help describe the three groups we are seeing from the K-means clustering analysis. The current anakysis does not look at demographic data such as race or family income data. These maybe correlated with student performance metrics such as top 10% and top 25%. The possability for correlation is based off knowledge that large urban distrcits tend to serve minority populations and under perform suburban districts. 
+
+#Another factor that might explain these clusters include amount of scholarships awarded, the size of University endowments and programs offered.
+```
+
+```{r}
+#Consider Tufts University, which is missing some information. Compute the Euclidean distance of this record from each of the clusters that you found above (using only the measurements that you have). Which cluster is it closest to? Impute the missing values for Tufts by taking the average of the cluster on those measurements.
+
+```
+
+
+```{r}
+tufts <- univ[476,]
+
+tufts
+
+#Missing value is X...PT.undergrad
+```
+
+
+```{r}
+PT_Undergrad_Mean <- univ.com.group %>% group_by(group) %>% summarize("PT_UG_Mean" = mean(X..PT.undergrad))
+
+PT_Undergrad_Mean
+```
+
+```{r}
+tufts1 <- tufts
+tufts1$X..PT.undergrad <- 609.2255	
+tufts1 <- tufts1[,4:20]
+tufts.norm.1 <- predict(norm.values, tufts1)
+
+tufts2 <- tufts
+tufts2$X..PT.undergrad <- 313.5867		
+tufts2 <- tufts2[,4:20]
+tufts.norm.2 <- predict(norm.values, tufts2)
+
+tufts3 <- tufts
+tufts3$X..PT.undergrad <- 3500.5652		
+tufts3 <- tufts3[,4:20]
+tufts.norm.3 <- predict(norm.values, tufts3)
+```
+
+```{r}
+centers.df <- as.data.frame(k3$centers)
+
+dist(rbind(tufts.norm.1,centers.df[1,]))
+dist(rbind(tufts.norm.2,centers.df[2,]))
+dist(rbind(tufts.norm.3,centers.df[3,]))
+
+#based on the caluclation wuclidean distance, Tufts belongs in group 2.
+```
+
+
+```{r}
+#Scratch Work Below
+```
+
+
+
+
+
+
+
+
+```{r}
+#tufts <- univ[476,]
+
+#tufts
+
+#Missing value is X...PT.undergrad
+
+#colMeans(univ.com[,4:20])
+
+#X..PT.undergrad mean =  797.45435   
+
+```
+
+```{r}
+#Creating Tufts Vector
+
+#tufts$X..PT.undergrad <- 797.45435  
+
+#tufts <- tufts[,4:20]
+
+#tufts
+```
+
+```{r}
+#Normalizing the data
+
+#tufts.norm <- predict(norm.values,tufts)
+
+#tufts.norm
+
+#tufts
+```
+
+```{r}
+#Assigning Tufts to a group
+
+#tufts.missing <- univ[476,]
+
+#tufts.missing.norm <- predict(norm.values,tufts.missing)
+
+#tufts.missing.norm <- tufts.missing.norm[,4:20]
+
+#tufts.missing.norm
+```
+
+```{r}
+#set.seed(756)
+
+#k3.1 = kcca(univ.norm, k=3, kccaFamily("kmeans"))
+
+#k3.1
+
+c#lusters_index <-predict(k3.1)
+
+```
+
