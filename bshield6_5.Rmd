@@ -1,0 +1,118 @@
+---
+title: "bshield6_5"
+author: "Brandon Lloyd Shields"
+date: "4/13/2020"
+output: html_document
+---
+```{r}
+library(dplyr)
+library(tidyr)
+library(cluster)
+```
+
+
+```{r}
+#read csv
+#saved CSV to my personal github since I could not access url through blackboard
+cereal <- read.csv(file = url("https://raw.githubusercontent.com/brandonlloydshields/64060_001/master/Assignment_5"))
+```
+
+```{r}
+#Remove all cereals with missing value 
+cereal <- na.omit(cereal)
+head(cereal)
+```
+
+```{r}
+#changing data to numeric to prepare for normalization. 
+
+cereal$calories <- as.numeric(cereal$calories)
+cereal$protein <- as.numeric(cereal$protein)
+cereal$fat <- as.numeric(cereal$fat)
+cereal$sodium <- as.numeric(cereal$sodium)
+cereal$sugars <- as.numeric(cereal$sugars)
+cereal$potass <- as.numeric(cereal$potass)
+cereal$vitamins <- as.numeric(cereal$vitamins)
+cereal$shelf <- as.numeric(cereal$shelf)
+
+```
+
+```{r}
+#selecting continuous variable to be per Euclidean distance requirement and scaling. Using rownames and eliminating named column so that scale function can be applied.
+
+cereal <- cereal[,c(1,4:16)]
+row.names(cereal) <- cereal$name
+cereal$name <- NULL
+cereal.norm <- scale(cereal)
+
+```
+
+
+```{r}
+#hierarchical for each type of method followed by the aggolorative coefficent. 
+
+cereal.single <- agnes(cereal.norm, method = "single")
+cereal.complete <- agnes(cereal.norm, method = "complete")
+cereal.average <- agnes(cereal.norm, method = "average")
+cereal.ward <- agnes(cereal.norm, method = "ward")
+```
+
+```{r}
+print(cereal.single$ac)
+print(cereal.complete$ac)
+print(cereal.average$ac)
+print(cereal.ward$ac)
+
+#The agglomerative coefficient measures the amount of clustering structure from 0 to 1 where 1 suggests the strongest clustering struture. Based on the coefficnet results below, I would choose ward. 
+```
+
+```{r}
+dendo1 <- pltree(cereal.ward, cex = .6, hang = -1, main = "Dendrogram of Cereals")
+
+#Based on dendrogram below I would split the data into 5 or 6 clusters by choosing a height of 10
+```
+
+```{r}
+#using hclust to create dendogram with borders
+d <- dist(cereal.norm, method = "euclidean")
+hc_ward <- hclust(d, method = "ward.D2")
+plot(hc_ward, cex = .6)
+dendo2<-rect.hclust(hc_ward, k=6, border= 1:6)
+```
+
+```{r}
+#Setting up partition a to test for stability. Based on dendrogram below and comapring to that above, we can see that there are differences between the two. Now we need to detemine the magnitude of these differences. 
+
+set.seed(123)
+parta <- cereal.norm[sample(nrow(cereal.norm),70),]
+dpa <- dist(parta, method = "euclidean")
+hc_wardpa <- hclust(dpa, method = "ward.D2")
+plot(hc_wardpa, cex = .6)
+dendo3 <- rect.hclust(hc_wardpa, k=6, border= 1:6)
+
+```
+
+```{r}
+#using cutree function to assingn each cereal a cluster
+cereal_sub <- cutree(hc_ward, k=6)
+pa_sub <- cutree(hc_wardpa, k=6)
+
+#creating data frames with cluster cereal name
+cereal.cluster <- data.frame("Cluster_Original" = cereal_sub, "Name" = hc_ward$labels)
+pa.cluster <- data.frame("Cluster_Partition_A" = pa_sub, "Name" = hc_wardpa$labels) 
+pa.cluster$Name <- as.character(pa.cluster$Name)
+cereal.cluster$Name <- as.character(cereal.cluster$Name)
+
+#Join together two tables in order to compare cluster from original dataset and partition b
+Stability <- left_join(cereal.cluster, pa.cluster, by = "Name")
+Stability <- Stability[,c(2,1,3)] %>% na.omit(Stability) %>% mutate(Diff = Cluster_Original - Cluster_Partition_A)
+
+#Calculate percentage of those records who did not have the same cluster assinged.
+Percent_Same <- sum(Stability$Diff == 0)/nrow(Stability)
+print(Percent_Same)
+```
+
+```{r}
+#If elementary schools would like to choose a set of healthy cereals to deliver to students, it may be wise not to normalize data during the analysis. Normally, data is normalized because distance is impacted by scale. This means that larger values would play a dispproportionate role in determing distance and therefore the clusters. However, if variables used in the analysis that were both larger and key to determeinates of health, then this weighting may help idenitfy a health cluster. For example, with this dataset if sodium and potassium were considered leading indicators of "health" then it may make sense not to mormalize and allow these metrcis to have a a larger impact on the distance metrics and therefore the clustering. 
+```
+
