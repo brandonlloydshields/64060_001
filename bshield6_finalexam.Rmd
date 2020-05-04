@@ -1,0 +1,269 @@
+---
+title: "Final Project - Machine Learning"
+author: "Brandon Lloyd Shields"
+date: "4/21/2020"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r Loading Packages, include=FALSE}
+#Loading Packages
+library(dplyr)
+library(flexclust)
+library(factoextra)
+library(ggplot2)
+library(caret)
+library(class)
+library(gmodels)
+library(ROCR)
+```
+
+
+```{r Getting Raw Data, include=FALSE}
+#Getting Raw Data
+
+crisa.raw <- read.csv(url("https://raw.githubusercontent.com/brandonlloydshields/64060_001/master/CRISA"))
+
+str(crisa.raw)
+
+#adjusting data to proper structure for analysis
+crisa.raw[,12:19] <- apply(crisa.raw[,12:19],2,as.numeric)
+crisa.raw[,20:46] <- apply(crisa.raw[,20:46], 2, 
+                           function(x) as.numeric((sub("%","", as.character(x))))/100)
+
+
+#review summary of data
+
+summary(crisa.raw)
+```
+
+```{r Normalizing Data, include=FALSE}
+#K-means clustering based on purchase behavior
+
+#create measure of brand loyalty that treats loyalty across all products equally. 
+
+crisa.analysis <- mutate(crisa.raw, calc.brand.loyal = apply(crisa.raw[,23:30],1,max))
+
+#normalizing the data set
+
+crisa.norm  <- crisa.analysis
+crisa.norm[,12:47] <- scale(crisa.norm[,12:47])
+```
+
+```{r Beahavior Cluster}
+#K-means based on purchase behavior
+set.seed(123)
+fviz_nbclust(crisa.norm[,c(12:18,31,47)],kmeans, method = "silhouette")
+fviz_nbclust(crisa.norm[,c(12:18,31,47)],kmeans, method = "wss")
+Behavior_cluster <- kmeans(crisa.norm[,c(12:18,31,47)],centers = 2, nstart = 25)
+fviz_cluster(Behavior_cluster,crisa.norm[,c(12:18,31,47)], 
+             main = "Purchase Behavior Cluster Plot")
+crisa.analysis <- mutate(crisa.analysis, Behavior = Behavior_cluster$cluster)
+
+#Analysis
+Behavior_cluster$centers
+
+#When clustering based on Purchase Beavior (variables including "Number of Brands", "Brand Runs", "Total Volume", "Number of Transactions", "Value", "Volume per Tranaction", and "Brand Loyalty" calculations) two distonct clusters are chosen asfter using the wss and silhoutte method. The clusters below show distinctness on all variables measured. 
+
+#Cluster 1: Cluster 1 tends to purchase more bath soap in terms of volume and number of transactions.They purchase from more brands and while the may have a higher brand runs, (they purchase more) the areloyal to a particular brand. 
+
+#Cluster 2: Cluster 2 on the other hand is more loyal to a paritcular brand, but purchases less soap in terms of both volume and number of tranctions. 
+```
+
+```{r Basis Clusters}
+#K-Means based on the basis of purchase
+
+#It may prove to be unecessary to include all Pormotion categories, especially since many are not not used by cistomers. DOing a basic summary on these variables and reveiwing the means show that product 5 and 15 are most hevaily used and will be included in the cluster analysis. 
+
+summary(crisa.analysis[,36:46])
+
+set.seed(128)
+fviz_nbclust(crisa.norm[,c(19,20,21,22,32:36,45)],kmeans, method = "silhouette")
+fviz_nbclust(crisa.norm[,c(19,20,21,22,32:36,45)],kmeans, method = "wss")
+Basis_cluster <- kmeans(crisa.norm[,c(19,20,21,22,32:36,45)],centers = 4, nstart = 25)
+fviz_cluster(Basis_cluster,crisa.norm[,c(19,20,21,22,32:36,45)], 
+             main = "Basis of Purchase Cluster Plot")
+crisa.analysis <- mutate(crisa.analysis, Basis = Basis_cluster$cluster)
+
+#Analysis
+Basis_cluster$centers
+
+#When clustering based on Basis of Purchase (variables including "Average Price", "Volume Purchased with No Promotion", "Volume purchased under Promotion 6", "Volume Purchased Under Other Promotion" Percent of volume purchased under catrgories 1-5 and percent of volume purchased under promotion 5 and 14) four distonct clusters are chosen asfter using the wss and silhoutte method. 
+
+#Cluster 1: Cluster 1 is very responsive to promotion number 6  as well as other promotions. Of all clusters, they are the group most adverse to making purchases with no promotions at all. Their purchase seem to favor price catrgory 4 and are not overly responsive to either proposistion catrgory 5 or 15.
+
+#Cluster 2: Cluster 2, of all for cluster, favors purchases with no promotions and was the most adverse promotion 6 and others. Cluster 2 favors price category 2 and proposition catgegory 5 over 14 (although the afinity or adversion to other does not have a strong magnitude.)
+
+#Cluster 3: What makes Cluster 3 so distinct is it is more likley to pay higher prices than the other clusters and not having a strong preference for pormotions. It favors price category number one and does not an affinity for either proposistion category.
+
+#Cluster 4: What makes CLuster for distinct is it is the most likely to spend the least on soap but they do not respond as well to promotion 6 as compared to other promotions. They have strong preference for Price Category 3 and are strongly adverse to Price Category 2. They are also very responsive to Proposition Category 14 but it is quite the opposite for Proposistion Category 5. 
+```
+
+```{r Combined Cluster}
+set.seed(131)
+fviz_nbclust(crisa.norm[,c(12:18,31,47,19,20,21,22,32:36,45)],kmeans, method = "silhouette")
+fviz_nbclust(crisa.norm[,c(12:18,31,47,19,20,21,22,32:36,45)],kmeans, method = "wss")
+Combined_cluster <- kmeans(crisa.norm[,c(12:18,31,47,19,20,21,22,32:36,45)],centers = 2, nstart = 25)
+fviz_cluster(Combined_cluster,crisa.norm[,c(12:18,31,47,19,20,21,22,32:36,45)], 
+             main = "Combined Cluster Plot")
+
+#Analysis
+
+Combined_cluster$size
+Combined_cluster$centers
+
+#The silhouette method indicates that number of clusetrs (k) should be equal to two. However, there is some concern over whether or not marketing would be able to provided the kind of targeted promotions based on two clusters, especially considering the size difference bewteen the two (Cluster 1 = 72 and Cluster 2 = 528)
+
+#There is a high degree of distinguishability between the two clusters. 
+
+#Cluster 1: Cluster 1 can be defined as being more brand loyal but also price adverse with a stronger preference for Price Category # 3 over all others and very responsive to proposistion 14. 
+#Cluster 2: Cluster 2 is harder to define with centers that are closer to zero across all variable. This is not suprising given the size as cluster 2. Based on this and the fact the WSS method does not clealry indiciate two clusters via the elbow method, there is a reason to review clustering when k = 3 or 4. 
+
+
+```
+
+```{r Combined with Four Clusters}
+# Testing combined cluster when k=4
+
+set.seed(140)
+Combined_cluster.4 <- kmeans(crisa.norm[,c(12:18,31,47,19,20,21,22,32:36,45)],centers = 4, nstart = 25)
+
+Combined_cluster.4$size
+Combined_cluster.4$centers
+
+#Analysis 
+
+#Here we sizes of clusters are a little more distributed but its important to see if they are distinguishable. Based on analysis below when using all variables, I would opt for four clusters.
+
+#Cluster 1: CLuster one does not have such strong deifning characteristics as the other clusters. What can be said it is reativley responsive to Proposistion Category 5, and makes purchases with no promotion more so than other clusters.
+
+#Cluster 2: Cluster 2 can be defined as being more brand loyal but also price sensitive with a stronger preference for Price Category # 3 over all others and very responsive to proposistion 14
+
+#Cluster 3: Cluster 3 is likley to buy the least amount of soap in terms of volume comapred to other clusters. This coincides with lower total volume and number of transactions. They are not overly brand loyal and are likley to pay the highest average price. They heavily favor price category 2 and are not responsive to either proposistion category. They are not enticed by promotions and respond strongly to price category 1 but neither proposisiton category.
+
+#Cluster 4: Cluster 4 is more likley to buy mutliple brands of soap comapred to the other clusters, have longer brand runs, and have higher number of transactions. They are not very brand loyal and fall in the middle in terms of average price. They are more responsive to promotion 6 than others and are less likley to buy when there is no promotion.
+
+#Based on the needs of the marketing department, the distinguishability of the clusters, and consulting the WSS method for k selection, I have decided that the combined model should include four clusters.
+
+crisa.analysis <- mutate(crisa.analysis, Combined = Combined_cluster.4$cluster)
+```
+
+```{r Demographic Profiling}
+#Demographic Profiling
+
+#After reviewing the three models, I have chosen to pursue the combined model. Distinguishable characteristics appear in both Purchase Beahvior and Basis of Purchase that it warrants a combined appraoch. 
+
+#Now demographic characteristics need to be associate with clusters in order to provide market segments.
+
+#Create Means Table for data that is reported on a scale
+
+Demo.Table <- crisa.analysis %>% group_by(Combined) %>% 
+  summarise( Socioeconomic_Class = mean(SEC), Age = mean(AGE), Education =  mean(EDU),
+             Household = mean(HS), Affluence_Index = mean(Affluence.Index))
+
+print(Demo.Table)
+
+
+```
+
+```{r Demo Tables, include=FALSE}
+# Create tables for othe demogrpahic variables not icnluded in means analysis. These do not show high degree pf variability across groups and are not as important in creating differentiated segments.
+
+FEH <- prop.table(table(crisa.analysis$FEH, crisa.analysis$Combined), margin = 2)
+row.names(FEH) <- c("Unspecified","Pure Veg", "Pure Veg with Eggs", "Non Veg")
+
+print(FEH)
+
+Child <- prop.table(table(crisa.analysis$CHILD, crisa.analysis$Combined), margin = 2)
+row.names(Child) <- c("Children up to age 6 present (only)", "Children ubetween 7-14 present (only)", "Both", "None", "Unspecified" )
+
+print(Child)
+
+TV <- prop.table(table(crisa.analysis$CS, crisa.analysis$Combined), margin = 2)
+row.names(TV) <- c("Undefined", "Available", "Unavailable")
+
+print(TV)
+
+SEX <- prop.table(table(crisa.analysis$SEX, crisa.analysis$Combined), margin = 2)
+row.names(SEX) <- c("Undefined", "Male", "Female")
+
+print(SEX)
+```
+
+```{r Segmentation Profiles}
+#Market Segment Profiles
+
+#In and Out(1): This segment is decently welathy and educated although, less than the Percieved Quality/Status and Family Oriented segments. They often make purchases with no promotion and are most responsive to the beauty proposistion. 
+
+#Price Focused(2): This segment belong to the lowest social class and has lower levels of education and wealth. Because of this they spend the least amount per unit of soap and are extremley brand loyal. They are very reposnisve to using coupons (Price Category 1) and the proposisiton of any carbolic. 
+
+#Percieved Quality/Status(3): These segement belongs to the upper class and is marked by higher education and wealth. However, this group tends to have a smaller household. This means they do not buy large volumes of soap. This group is not responsive to promotions and is not brand loyal. They are the most likley to pay the highest price for soap which coinsides with their preference for premium soaps (Price Category 1) which could be due to higher disposable income, and price as a proxy for wqality.
+
+#Family Oriented(4): This segment is upper middle class based on socioeconmic staus and are very educated and overall affluent. This allows them to support large family's which coinside with large volumes of soap purchases.This group is not overly brand loyal and will try various brands. They are less likely to buy when there is a promotion and responded well to promotion #6, banded offers. Because they have larger households they are not looking to spend a lot of money on soap, but their affluence means that they will pay more than others for a quality porduct.  
+
+```
+
+```{r Cluster Plots, echo=FALSE}
+#Additional Visuals by Cluster based on Combined Model
+
+plot1 <- ggplot(crisa.analysis, aes(x = Avg..Price, y = Affluence.Index, color = SEC)) + geom_jitter() + facet_grid(.~Combined) + ggtitle("Average Price, Affluence and Class by Cluster") + xlab("Average Price") + ylab("Affluence Index") + labs(color = "Class") + theme_bw()
+
+plot1
+
+plot2 <- ggplot(crisa.analysis, aes(x = calc.brand.loyal, y = Affluence.Index, color = SEC)) + geom_jitter() + facet_grid(.~Combined) + ggtitle("Brand Loyalty, Affluence and Class by Cluster") + xlab("Average Price") + ylab("Affluence Index") + labs(color = "Class") + theme_bw()
+
+plot2 
+```
+
+```{r Create Tarining and Validation Sets, include=FALSE}
+#Devlop Model
+
+crisa.norm <- mutate(crisa.norm, Combined = Combined_cluster.4$cluster)
+
+#Create Partiion data sets for Training and Validation
+set.seed(444)
+Train_Index <- createDataPartition(crisa.norm$Combined, p=.6, list = FALSE)
+Train.crisa <- crisa.norm[Train_Index,]
+Validate.crisa <- crisa.norm[-Train_Index,]
+
+Train_Predictors <- Train.crisa[,c(12:18,31,47,19,20,21,22,32:36,45)]
+Train_Labels <- Train.crisa[,48]
+
+Validate_Predictors <- Validate.crisa[,c(12:18,31,47,19,20,21,22,32:36,45)]
+Validate_Labels <- as.factor(Validate.crisa[,48])
+
+
+```
+
+```{r Hyper Tuning for K, echo=FALSE}
+set.seed(445)
+model <- train(Combined ~ No..of.Brands + Brand.Runs + Total.Volume + No..of..Trans + Value + Trans...Brand.Runs + Vol.Tran + Avg..Price +  Pur.Vol.No.Promo.... + Pur.Vol.Promo.6.. + Pur.Vol.Other.Promo.. + Others.999 + Pr.Cat.1 + Pr.Cat.2 + Pr.Cat.3 + Pr.Cat.4 + PropCat.5 + PropCat.6 +  PropCat.7 + PropCat.8 + PropCat.9 + PropCat.10 + PropCat.11 + PropCat.12 + PropCat.13 + PropCat.14 + PropCat.15 + calc.brand.loyal, Train.crisa, method = "knn")
+model
+```
+
+```{r Predicting Output, include=FALSE}
+set.seed(446)
+Predicted_Validate_Labels <- as.factor(knn(Train_Predictors,Validate_Predictors, cl = Train_Labels, k = 9))
+Predicted_Validate_Labels
+
+```
+
+```{r 4-Class Confusion Matrix, echo=FALSE}
+
+Confusion_Matrix <- confusionMatrix(data = Predicted_Validate_Labels, reference = Validate_Labels)
+
+Confusion_Matrix
+
+```
+
+```{r Commenting on Output}
+# I feel confident in my models ability to predict various clusters based on performance metrics. The accuracy of the model was 91.25% meaning a high degree of of clusters were correctly identified. Sensitivity across the clusters were also high for all three clases meaning the model does a good job at finding all relevant cases within the dataset for each cluster and a low number of false negatives. Precision metrics are all above 85% meaning for each class, the model indicates low number of false positives.
+
+
+Confusion_Matrix$byClass
+
+
+```
+
